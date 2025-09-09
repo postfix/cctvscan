@@ -26,3 +26,28 @@ A pentest toolkit to **discover, fingerprint, and sanity-check IP cameras** acro
 
 ## Workflow
 
+Targets (LAN / Single IP / File)
+│
+▼
+[1] Port Scan → 80/443/8080–8099/8443 · 554/8554 · 1935–1939 · 3702 (we scan 0–65535 TCP by default)
+│
+▼
+[2] Camera Heuristics → HTTP Server/body + RTSP Server/Public
+│
+▼
+[3] Brand Fingerprint → Hikvision / Dahua / Axis / CP Plus / Generic
+│
+▼
+[4] CVE Hints (internal DB) → NVD links in logs
+│
+▼
+[5] Login Pages → common paths (/, /login, /admin, …)
+│
+▼
+[6] Default Creds → only where auth is required (401/403/WWW-Auth)
+│
+▼
+[7] Streams → RTSP DESCRIBE (SDP), HTTP MJPEG/snapshots, RTMP hint
+│
+▼
+[8] Report (JSONL + Markdown)
