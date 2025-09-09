@@ -208,4 +208,4 @@ Only scan assets you are authorized to test. Respect rate limits and local laws.
 License:
 
 MIT
-```
+
