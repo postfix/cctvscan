@@ -1,0 +1,229 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/postfix/cctvscan/internal/credbrute"
+	"github.com/postfix/cctvscan/internal/fingerprint"
+	"github.com/postfix/cctvscan/internal/portscan"
+	"github.com/postfix/cctvscan/internal/probe"
+	"github.com/postfix/cctvscan/internal/streams"
+	"github.com/postfix/cctvscan/internal/targets"
+)
+
+var (
+	portsFlag     = flag.String("ports", "0-65535", "Port range to scan (e.g., '80,443,8000-9000')")
+	rateFlag      = flag.Int("rate", 1000, "Packets per second rate for naabu")
+	retryFlag     = flag.Int("retry", 3, "Number of retries for port scanning")
+	waitFlag      = flag.Int("wait", 1, "Seconds to wait for late replies")
+	adapterFlag   = flag.String("adapter", "", "Network adapter name for naabu")
+	adapterIPFlag = flag.String("adapter-ip", "", "Source IP address for naabu")
+	timeoutFlag   = flag.String("timeout", "30m", "Overall scan timeout (e.g., '30m', '1h')")
+	credsFlag     = flag.String("creds", "/etc/cctvscan/credentials.txt", "Credentials file for brute force")
+	outputFlag    = flag.String("output", ".", "Output directory for results")
+	debugFlag     = flag.Bool("debug", false, "Enable debug mode with verbose output")
+	helpFlag      = flag.Bool("help", false, "Show help message")
+)
+
+func main() {
+	flag.Parse()
+
+	if *helpFlag || len(flag.Args()) == 0 {
+		printHelp()
+		os.Exit(0)
+	}
+
+	// Parse timeout duration
+	timeout, err := time.ParseDuration(*timeoutFlag)
+	if err != nil {
+		log.Fatalf("Invalid timeout format: %v", err)
+	}
+
+	// Parse targets
+	targetList, err := targets.Expand(flag.Args())
+	if err != nil {
+		log.Fatalf("Error parsing targets: %v", err)
+	}
+
+	if len(targetList) == 0 {
+		log.Fatal("No valid targets found")
+	}
+
+	if *debugFlag {
+		log.Printf("DEBUG: Scanning %d target(s): %v", len(targetList), targetList)
+		log.Printf("DEBUG: Configuration - ports: %s, rate: %d, wait: %d, timeout: %v", 
+			*portsFlag, *rateFlag, *waitFlag, timeout)
+	}
+
+	fmt.Printf("Scanning %d target(s)\n", len(targetList))
+
+	// Configure naabu - use camera ports by default unless specified
+	portsToScan := *portsFlag
+	if portsToScan == "0-65535" {
+		// Use camera-specific ports by default
+		portsToScan = probe.CameraPortsString()
+		if *debugFlag {
+			log.Printf("DEBUG: Using camera-specific ports: %s", portsToScan)
+		}
+	}
+
+	cfg := portscan.NaabuConfig{
+		Ports:     portsToScan,
+		Rate:      *rateFlag,
+		Retry:     *retryFlag,
+		Wait:      *waitFlag,
+		Adapter:   *adapterFlag,
+		AdapterIP: *adapterIPFlag,
+		ExtraArgs: []string{"--open-only"},
+		Debug:     *debugFlag,
+	}
+
+	if *debugFlag {
+		log.Printf("DEBUG: Naabu config: %+v", cfg)
+	}
+
+	scanner := portscan.NewNaabuScanner(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Scan targets
+	results, err := scanner.Scan(ctx, targetList)
+	if err != nil {
+		log.Fatalf("Scan failed: %v", err)
+	}
+
+	fmt.Printf("Found %d hosts with open ports\n", len(results))
+
+	// Process each host in parallel
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	
+	for host, ports := range results {
+		wg.Add(1)
+		go func(host string, ports []int) {
+			defer wg.Done()
+			
+			if *debugFlag {
+				log.Printf("DEBUG: Processing host %s with ports %v", host, ports)
+			}
+
+			mu.Lock()
+			fmt.Printf("\n=== Processing %s ===\n", host)
+			fmt.Printf("Open ports: %v\n", ports)
+			mu.Unlock()
+
+		// Filter HTTP-like ports
+		httpPorts := probe.FilterHTTPish(ports)
+		rtspPorts := probe.FilterRTSP(ports)
+
+		fmt.Printf("HTTP ports: %v\n", httpPorts)
+		fmt.Printf("RTSP ports: %v\n", rtspPorts)
+
+		// Probe HTTP metadata
+		meta := probe.ProbeHTTPMeta(ctx, host, httpPorts)
+		if meta.Server != "" {
+			fmt.Printf("HTTP Server: %s\n", meta.Server)
+			if *debugFlag && meta.BodySnippet != "" {
+				log.Printf("DEBUG: HTTP body snippet: %s", meta.BodySnippet)
+			}
+		}
+
+		// Find login pages
+		loginURLs := probe.FindLoginPages(ctx, host, httpPorts)
+		if len(loginURLs) > 0 {
+			fmt.Printf("Login pages: %v\n", loginURLs)
+		}
+
+		// Probe RTSP
+		if len(rtspPorts) > 0 {
+			rtspInfo := probe.ProbeRTSP(ctx, host, rtspPorts)
+			if rtspInfo.Any {
+				fmt.Printf("RTSP Server: %s\n", rtspInfo.Server)
+				fmt.Printf("RTSP Public: %s\n", rtspInfo.Public)
+			}
+		}
+
+		// Fingerprint brand
+		brand, note := fingerprint.Detect(meta.Server, meta.BodySnippet, "")
+		if brand != "" {
+			fmt.Printf("Brand: %s", brand)
+			if note != "" {
+				fmt.Printf(" (%s)", note)
+			}
+			fmt.Println()
+
+			// Show CVEs
+			cves := fingerprint.CVEsForBrand(brand)
+			if len(cves) > 0 {
+				fmt.Printf("Known CVEs: %v\n", cves)
+				fmt.Printf("CVE Links: %v\n", fingerprint.CVELinks(cves))
+			}
+		}
+
+		// Try default credentials if login pages found
+		if len(loginURLs) > 0 {
+			credFile := *credsFlag
+			if _, err := os.Stat(credFile); os.IsNotExist(err) {
+				if *debugFlag {
+					log.Printf("DEBUG: Credentials file %s not found, skipping brute force", credFile)
+				}
+				credFile = "" // use built-in defaults
+			} else {
+				if *debugFlag {
+					log.Printf("DEBUG: Using credentials file: %s", credFile)
+				}
+			}
+
+			if cred := credbrute.TryDefaultBasic(ctx, host, loginURLs, credFile, 5*time.Second); cred != "" {
+				fmt.Printf("✓ Default credentials found: %s\n", cred)
+			} else {
+				fmt.Println("✗ No default credentials found")
+			}
+		}
+
+		// Try MJPEG streams
+		if len(httpPorts) > 0 {
+			fmt.Println("Checking for MJPEG streams...")
+			outputDir := *outputFlag + "/snapshots"
+			if *debugFlag {
+				log.Printf("DEBUG: Saving snapshots to: %s", outputDir)
+			}
+			streams.TryMJPEG(ctx, host, httpPorts, outputDir)
+		}
+
+		// Probe ONVIF
+		onvifResult := probe.ProbeONVIF(ctx, host)
+		if onvifResult != "" {
+			fmt.Printf("ONVIF: %s\n", onvifResult)
+		}
+
+		fmt.Println()
+	}
+
+	if *debugFlag {
+		log.Printf("DEBUG: Scan completed successfully")
+	}
+}
+
+func printHelp() {
+	fmt.Printf("Usage: %s [OPTIONS] <target> [target2 ...]\n", os.Args[0])
+	fmt.Println("\nTargets can be: IP addresses, CIDR ranges, or files containing targets")
+	fmt.Println("\nOptions:")
+	flag.VisitAll(func(f *flag.Flag) {
+		fmt.Printf("  -%-12s %s (default: %v)\n", f.Name, f.Usage, f.DefValue)
+	})
+	fmt.Println("\nExamples:")
+	fmt.Printf("  %s 192.168.1.100\n", os.Args[0])
+	fmt.Printf("  %s -rate 5000 -ports 80,443,8080 192.168.1.0/24\n", os.Args[0])
+	fmt.Printf("  %s -debug -creds mycreds.txt targets.txt\n", os.Args[0])
+	fmt.Println("\nCredentials file format (user:pass per line):")
+	fmt.Println("  admin:admin")
+	fmt.Println("  admin:12345") 
+	fmt.Println("  root:root")
+}
