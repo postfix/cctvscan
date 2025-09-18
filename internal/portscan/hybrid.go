@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Shared localhost detection to avoid duplicate work
@@ -16,14 +17,17 @@ var (
 
 // HybridConfig holds configuration for the hybrid scanner
 type HybridConfig struct {
-	Ports     string
-	Rate      int
-	Retry     int
-	Wait      int
-	Adapter   string
-	AdapterIP string
-	ExtraArgs []string
-	Debug     bool
+	Ports        string
+	Rate         int
+	Retry        int
+	Wait         int
+	Adapter      string
+	AdapterIP    string
+	ExtraArgs    []string
+	Debug        bool
+	Privileged   bool // Force privileged mode (SYN scan)
+	Unprivileged bool // Force unprivileged mode (CONNECT scan)
+	Threads      int  // Number of threads for naabu
 }
 
 // HybridScanner combines masscan for discovery and naabu for verification
@@ -55,14 +59,18 @@ func (s *HybridScanner) Scan(ctx context.Context, targets []string) (map[string]
 		}
 
 		naabuCfg := NaabuConfig{
-			Ports:     s.cfg.Ports,
-			Rate:      s.cfg.Rate,
-			Retry:     s.cfg.Retry,
-			Wait:      s.cfg.Wait,
-			Adapter:   s.cfg.Adapter,
-			AdapterIP: s.cfg.AdapterIP,
-			ExtraArgs: s.cfg.ExtraArgs,
-			Debug:     s.cfg.Debug,
+			Ports:        s.cfg.Ports,
+			Rate:         s.cfg.Rate,
+			Retry:        s.cfg.Retry,
+			Wait:         s.cfg.Wait,
+			Adapter:      s.cfg.Adapter,
+			AdapterIP:    s.cfg.AdapterIP,
+			ExtraArgs:    s.cfg.ExtraArgs,
+			Debug:        s.cfg.Debug,
+			Privileged:   s.cfg.Privileged,
+			Unprivileged: s.cfg.Unprivileged,
+			Timeout:      5 * time.Second,
+			Threads:      s.cfg.Threads,
 		}
 
 		naabuScanner := NewNaabuScanner(naabuCfg)
@@ -102,14 +110,18 @@ func (s *HybridScanner) Scan(ctx context.Context, targets []string) (map[string]
 
 	// Step 2: Use naabu for verification of discovered ports
 	naabuCfg := NaabuConfig{
-		Ports:     s.cfg.Ports,
-		Rate:      s.cfg.Rate / 2, // Slower rate for verification
-		Retry:     s.cfg.Retry,
-		Wait:      s.cfg.Wait,
-		Adapter:   s.cfg.Adapter,
-		AdapterIP: s.cfg.AdapterIP,
-		ExtraArgs: s.cfg.ExtraArgs,
-		Debug:     s.cfg.Debug,
+		Ports:        s.cfg.Ports,
+		Rate:         s.cfg.Rate / 2, // Slower rate for verification
+		Retry:        s.cfg.Retry,
+		Wait:         s.cfg.Wait,
+		Adapter:      s.cfg.Adapter,
+		AdapterIP:    s.cfg.AdapterIP,
+		ExtraArgs:    s.cfg.ExtraArgs,
+		Debug:        s.cfg.Debug,
+		Privileged:   s.cfg.Privileged,
+		Unprivileged: s.cfg.Unprivileged,
+		Timeout:      10 * time.Second, // Longer timeout for verification
+		Threads:      s.cfg.Threads,
 	}
 
 	naabuScanner := NewNaabuScanner(naabuCfg)

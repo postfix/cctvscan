@@ -16,6 +16,15 @@ var brandKeysBosch = []string{"bosch", "security systems", "flexidome", "dinion"
 var brandKeysSamsung = []string{"samsung", "samsung techwin", "samsung sds", "hanwha", "wisenet"}
 var brandKeysPanasonic = []string{"panasonic", "network camera", "wv", "bb", "blc"}
 var brandKeysVivotek = []string{"vivotek", "network camera", "ip camera", "fd", "sd"}
+var brandKeysCPPlus = []string{"cp plus", "cp-plus", "cpplus", "cp_plus", "uvr", "0401e1", "uvr-0401e1", "uvr0401e1"}
+var brandKeysFoscam = []string{"foscam", "foscam camera", "foscam ip camera"}
+var brandKeysDLink = []string{"d-link", "dlink", "d-link camera", "dlink camera"}
+var brandKeysEasyN = []string{"easyn", "easyn camera", "easyn ip camera"}
+var brandKeysEdimax = []string{"edimax", "edimax camera", "edimax ip camera"}
+var brandKeysIntellinet = []string{"intellinet", "intellinet camera", "intellinet ip camera"}
+var brandKeysTPLink = []string{"tp-link", "tplink", "tp-link camera", "tplink camera"}
+var brandKeysTrendnet = []string{"trendnet", "trendnet camera", "trendnet ip camera"}
+var brandKeysMobotix = []string{"mobotix", "mobotix camera", "mobotix ip camera"}
 var brandKeysGeneric = []string{"camera", "webcam", "surveillance", "ip camera", "network camera", "dvr", "nvr", "recorder"}
 
 // Version detection patterns for different brands
@@ -32,15 +41,23 @@ var versionPatterns = map[string]*regexp.Regexp{
 
 // Web page content patterns for brand detection
 var webContentPatterns = map[string]*regexp.Regexp{
-	"Hikvision": regexp.MustCompile(`(?i)(?:hikvision|hik-connect|ivms|web service|login\.jsp|main\.jsp)`),
-	"Dahua":     regexp.MustCompile(`(?i)(?:dahua|dss|smartpss|dmss|login\.html|main\.html)`),
-	"Axis":      regexp.MustCompile(`(?i)(?:axis|axis communications|axis camera|axis mjpg|axis-cgi)`),
-	"Sony":      regexp.MustCompile(`(?i)(?:sony|ipela|snc|sony network camera)`),
-	"Bosch":     regexp.MustCompile(`(?i)(?:bosch|flexidome|dinion|autodome|security systems)`),
-	"Samsung":   regexp.MustCompile(`(?i)(?:samsung|hanwha|wisenet|samsung techwin)`),
-	"Panasonic": regexp.MustCompile(`(?i)(?:panasonic|wv|bb|blc|network camera)`),
-	"Vivotek":   regexp.MustCompile(`(?i)(?:vivotek|fd|sd|ip camera|network camera)`),
-	"CP Plus":   regexp.MustCompile(`(?i)(?:cp plus|cpplus|cp-plus|cp_plus)`),
+	"Hikvision":  regexp.MustCompile(`(?i)(?:hikvision|hik-connect|ivms|web service|login\.jsp|main\.jsp)`),
+	"Dahua":      regexp.MustCompile(`(?i)(?:dahua|dss|smartpss|dmss|login\.html|main\.html)`),
+	"Axis":       regexp.MustCompile(`(?i)(?:axis|axis communications|axis camera|axis mjpg|axis-cgi)`),
+	"Sony":       regexp.MustCompile(`(?i)(?:sony|ipela|snc|sony network camera)`),
+	"Bosch":      regexp.MustCompile(`(?i)(?:bosch|flexidome|dinion|autodome|security systems)`),
+	"Samsung":    regexp.MustCompile(`(?i)(?:samsung|hanwha|wisenet|samsung techwin)`),
+	"Panasonic":  regexp.MustCompile(`(?i)(?:panasonic|wv|bb|blc|network camera)`),
+	"Vivotek":    regexp.MustCompile(`(?i)(?:vivotek|fd|sd|ip camera|network camera)`),
+	"CP Plus":    regexp.MustCompile(`(?i)(?:cp plus|cpplus|cp-plus|cp_plus|uvr|0401e1|uvr-0401e1|uvr0401e1)`),
+	"Foscam":     regexp.MustCompile(`(?i)(?:foscam|foscam camera|foscam ip camera)`),
+	"D-Link":     regexp.MustCompile(`(?i)(?:d-link|dlink|d-link camera|dlink camera)`),
+	"EasyN":      regexp.MustCompile(`(?i)(?:easyn|easyn camera|easyn ip camera)`),
+	"Edimax":     regexp.MustCompile(`(?i)(?:edimax|edimax camera|edimax ip camera)`),
+	"Intellinet": regexp.MustCompile(`(?i)(?:intellinet|intellinet camera|intellinet ip camera)`),
+	"TP-Link":    regexp.MustCompile(`(?i)(?:tp-link|tplink|tp-link camera|tplink camera)`),
+	"Trendnet":   regexp.MustCompile(`(?i)(?:trendnet|trendnet camera|trendnet ip camera)`),
+	"Mobotix":    regexp.MustCompile(`(?i)(?:mobotix|mobotix camera|mobotix ip camera)`),
 }
 
 // Title patterns for brand detection
@@ -75,7 +92,7 @@ func DetectWithVersion(serverHdr, body, rtspServer string) DetectResult {
 	lr := strings.ToLower(rtspServer)
 
 	// Enhanced brand detection with multiple methods
-	brands := []string{"Hikvision", "Dahua", "Axis", "Sony", "Bosch", "Samsung", "Panasonic", "Vivotek", "CP Plus"}
+	brands := []string{"Hikvision", "Dahua", "Axis", "Sony", "Bosch", "Samsung", "Panasonic", "Vivotek", "CP Plus", "Foscam", "D-Link", "EasyN", "Edimax", "Intellinet", "TP-Link", "Trendnet", "Mobotix"}
 
 	for _, brand := range brands {
 		// Method 1: Header matching
@@ -180,7 +197,23 @@ func getBrandKeys(brand string) []string {
 	case "Vivotek":
 		return brandKeysVivotek
 	case "CP Plus":
-		return []string{"cp plus", "cpplus", "cp-plus", "cp_plus"}
+		return brandKeysCPPlus
+	case "Foscam":
+		return brandKeysFoscam
+	case "D-Link":
+		return brandKeysDLink
+	case "EasyN":
+		return brandKeysEasyN
+	case "Edimax":
+		return brandKeysEdimax
+	case "Intellinet":
+		return brandKeysIntellinet
+	case "TP-Link":
+		return brandKeysTPLink
+	case "Trendnet":
+		return brandKeysTrendnet
+	case "Mobotix":
+		return brandKeysMobotix
 	default:
 		return []string{}
 	}

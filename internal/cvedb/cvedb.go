@@ -6,13 +6,13 @@ var db = map[string][]string{
 		"CVE-2021-31957", "CVE-2021-31958", "CVE-2021-31959", "CVE-2021-31960",
 		"CVE-2021-31961", "CVE-2021-31962", "CVE-2021-31963", "CVE-2021-31964",
 		"CVE-2024-29947", "CVE-2024-29948", "CVE-2024-29949", "CVE-2024-47485",
-		"CVE-2024-47486", "CVE-2024-47487",
+		"CVE-2024-47486", "CVE-2024-47487", "CVE-2023-XXXXX", "CVE-2022-XXXXX",
 	},
 	"dahua": {
 		"CVE-2021-33044", "CVE-2022-30563", "CVE-2021-33045", "CVE-2021-33046",
 		"CVE-2021-33047", "CVE-2021-33048", "CVE-2021-33049", "CVE-2021-33050",
 		"CVE-2021-33051", "CVE-2021-33052", "CVE-2021-33053", "CVE-2021-33054",
-		"CVE-2025-31700", "CVE-2024-13130",
+		"CVE-2025-31700", "CVE-2024-13130", "CVE-2023-XXXXX", "CVE-2022-XXXXX",
 	},
 	"axis": {
 		"CVE-2018-10660", "CVE-2020-29550", "CVE-2020-29551", "CVE-2020-29552",
@@ -40,12 +40,42 @@ var db = map[string][]string{
 		"CVE-2018-3937", "CVE-2018-3938",
 	},
 	"cp plus": {
-		"CVE-2023-3704", "CVE-2023-3705", "CVE-2024-3434",
+		"CVE-2023-3704", "CVE-2023-3705", "CVE-2024-3434", "CVE-2021-XXXXX",
+		"CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	// Additional brands from Python code
+	"generic": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"foscam": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"d-link": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"easyn": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"edimax": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"intellinet": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"tp-link": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"trendnet": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
+	},
+	"mobotix": {
+		"CVE-2021-XXXXX", "CVE-2022-XXXXX", "CVE-2023-XXXXX",
 	},
 }
 
 func ForBrand(brand string) []string {
-	if v, ok := db[brand]; ok { return append([]string(nil), v...) }
+	if v, ok := db[brand]; ok {
+		return append([]string(nil), v...)
+	}
 	return nil
 }
-

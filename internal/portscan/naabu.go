@@ -17,14 +17,18 @@ import (
 
 // NaabuConfig holds configuration for naabu scanning
 type NaabuConfig struct {
-	Ports     string
-	Rate      int
-	Retry     int
-	Wait      int
-	Adapter   string
-	AdapterIP string
-	ExtraArgs []string
-	Debug     bool
+	Ports        string
+	Rate         int
+	Retry        int
+	Wait         int
+	Adapter      string
+	AdapterIP    string
+	ExtraArgs    []string
+	Debug        bool
+	Privileged   bool // Force privileged mode (SYN scan)
+	Unprivileged bool // Force unprivileged mode (CONNECT scan)
+	Timeout      time.Duration
+	Threads      int
 }
 
 // NaabuScanner uses naabu for port verification and localhost scanning
@@ -43,28 +47,38 @@ func (s *NaabuScanner) Scan(ctx context.Context, targets []string) (map[string][
 		return map[string][]int{}, nil
 	}
 
-	// Configure naabu options using the official pattern
-	scanType := "CONNECT" // Default to connect scan
-	if os.Geteuid() == 0 {
-		scanType = "SYN" // Use SYN scan if running as root
-	}
+	// Determine scan type based on configuration and privileges
+	scanType := s.determineScanType()
 
 	if s.cfg.Debug {
-		log.Printf("DEBUG: Using naabu scan type: %s (running as root: %v)", scanType, os.Geteuid() == 0)
+		log.Printf("DEBUG: Using naabu scan type: %s", scanType)
+	}
+
+	// Set default values if not configured
+	timeout := s.cfg.Timeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+
+	threads := s.cfg.Threads
+	if threads == 0 {
+		threads = 25 // Default thread count
 	}
 
 	options := &runner.Options{
-		Host:      goflags.StringSlice(targets),
-		Ports:     s.cfg.Ports,
-		Rate:      s.cfg.Rate,
-		Retries:   s.cfg.Retry,
-		ScanType:  scanType,
-		SourceIP:  s.cfg.AdapterIP,
-		Interface: s.cfg.Adapter,
-		Silent:    !s.cfg.Debug,
-		Verbose:   s.cfg.Debug,
-		Debug:     s.cfg.Debug,
-		Timeout:   5 * time.Second, // Add timeout to prevent hanging
+		Host:       goflags.StringSlice(targets),
+		Ports:      s.cfg.Ports,
+		Rate:       s.cfg.Rate,
+		Retries:    s.cfg.Retry,
+		ScanType:   scanType,
+		SourceIP:   s.cfg.AdapterIP,
+		Interface:  s.cfg.Adapter,
+		Silent:     !s.cfg.Debug,
+		Verbose:    s.cfg.Debug,
+		Debug:      s.cfg.Debug,
+		Timeout:    timeout,
+		Threads:    threads,
+		WarmUpTime: 1, // Add warm-up time for SYN scans (in seconds)
 	}
 
 	if s.cfg.Debug {
@@ -92,7 +106,12 @@ func (s *NaabuScanner) Scan(ctx context.Context, targets []string) (map[string][
 		return nil, fmt.Errorf("failed to create naabu runner: %w", err)
 	}
 
-	defer naabuRunner.Close()
+	// Ensure proper cleanup
+	defer func() {
+		if closeErr := naabuRunner.Close(); closeErr != nil && s.cfg.Debug {
+			log.Printf("DEBUG: Error closing naabu runner: %v", closeErr)
+		}
+	}()
 
 	// Execute the scan
 	if err := naabuRunner.RunEnumeration(ctx); err != nil {
@@ -104,6 +123,37 @@ func (s *NaabuScanner) Scan(ctx context.Context, targets []string) (map[string][
 	}
 
 	return results, nil
+}
+
+// determineScanType determines the appropriate scan type based on configuration and privileges
+func (s *NaabuScanner) determineScanType() string {
+	// If explicitly configured, use that
+	if s.cfg.Privileged {
+		return "SYN"
+	}
+	if s.cfg.Unprivileged {
+		return "CONNECT"
+	}
+
+	// Auto-detect based on privileges
+	// Check if running as root (Unix) or with admin privileges (Windows)
+	if s.isPrivileged() {
+		return "SYN"
+	}
+
+	return "CONNECT"
+}
+
+// isPrivileged checks if the process has sufficient privileges for SYN scans
+func (s *NaabuScanner) isPrivileged() bool {
+	// On Unix systems, check if running as root
+	if os.Geteuid() == 0 {
+		return true
+	}
+
+	// Additional checks could be added here for Windows or other platforms
+	// For now, default to false if not root on Unix
+	return false
 }
 
 // VerifyPorts verifies discovered ports using naabu
@@ -136,7 +186,8 @@ func (s *NaabuScanner) VerifyPorts(ctx context.Context, discoveredPorts map[stri
 	// Update config for naabu verification
 	verifyCfg := s.cfg
 	verifyCfg.Ports = portStr
-	verifyCfg.Rate = s.cfg.Rate / 2 // Slower rate for verification
+	verifyCfg.Rate = s.cfg.Rate / 2      // Slower rate for verification
+	verifyCfg.Timeout = 10 * time.Second // Longer timeout for verification
 
 	naabuScanner := NewNaabuScanner(verifyCfg)
 
@@ -168,10 +219,14 @@ func buildPortString(ports []int) string {
 func ValidateNaabuInstallation() error {
 	// Try to create a naabu runner to validate installation
 	options := &runner.Options{
-		Host:   goflags.StringSlice([]string{"127.0.0.1"}),
-		Ports:  "80",
-		Rate:   100,
-		Silent: true,
+		Host:       goflags.StringSlice([]string{"127.0.0.1"}),
+		Ports:      "80",
+		Rate:       100,
+		Silent:     true,
+		ScanType:   "CONNECT", // Use CONNECT for validation to avoid privilege issues
+		Timeout:    5 * time.Second,
+		Threads:    1,
+		WarmUpTime: 0,
 	}
 
 	_, err := runner.NewRunner(options)

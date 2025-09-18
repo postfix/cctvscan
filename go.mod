@@ -76,6 +76,7 @@ require (
 	github.com/projectdiscovery/ipranger v0.0.53 // indirect
 	github.com/projectdiscovery/machineid v0.0.0-20240226150047-2e2c51e35983 // indirect
 	github.com/projectdiscovery/mapcidr v1.1.34 // indirect
+	github.com/projectdiscovery/naabu v1.1.4 // indirect
 	github.com/projectdiscovery/naabu/v2 v2.3.5 // indirect
 	github.com/projectdiscovery/networkpolicy v0.1.17 // indirect
 	github.com/projectdiscovery/ratelimit v0.0.81 // indirect

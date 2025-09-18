@@ -34,8 +34,10 @@ func ProbeRTSP(ctx context.Context, host string, ports []int) RTSPInfo {
 	for _, p := range ports {
 		addr := net.JoinHostPort(host, util.Itoa(p))
 		c, err := net.DialTimeout("tcp", addr, 1200*time.Millisecond)
-		if err != nil { continue }
-		_ = c.SetDeadline(time.Now().Add(1500*time.Millisecond))
+		if err != nil {
+			continue
+		}
+		_ = c.SetDeadline(time.Now().Add(1500 * time.Millisecond))
 		fmt.Fprintf(c, "OPTIONS rtsp://%s RTSP/1.0\r\nCSeq: 1\r\n\r\n", addr)
 		br := bufio.NewReader(c)
 		status, _ := br.ReadString('\n')
@@ -45,18 +47,22 @@ func ProbeRTSP(ctx context.Context, host string, ports []int) RTSPInfo {
 			for {
 				line, _ := br.ReadString('\n')
 				line = strings.TrimSpace(line)
-				if line == "" { break }
+				if line == "" {
+					break
+				}
 				l := strings.ToLower(line)
-				if strings.HasPrefix(l, "server:") && info.Server=="" {
+				if strings.HasPrefix(l, "server:") && info.Server == "" {
 					info.Server = strings.TrimSpace(line[7:])
 				}
-				if strings.HasPrefix(l, "public:") && info.Public=="" {
+				if strings.HasPrefix(l, "public:") && info.Public == "" {
 					info.Public = strings.TrimSpace(line[7:])
 				}
 			}
 		}
 		c.Close()
-		if info.Any { break }
+		if info.Any {
+			break
+		}
 	}
 	return info
 }
@@ -81,18 +87,18 @@ func ProbeRTSPDescribe(ctx context.Context, host string, port int, path string) 
 		return -1, false, err
 	}
 	defer c.Close()
-	
-	_ = c.SetDeadline(time.Now().Add(2000*time.Millisecond))
-	
+
+	_ = c.SetDeadline(time.Now().Add(2000 * time.Millisecond))
+
 	url := "rtsp://" + addr + path
 	fmt.Fprintf(c, "DESCRIBE %s RTSP/1.0\r\nCSeq: 2\r\nUser-Agent: CCTVScan/1.0\r\nAccept: application/sdp\r\n\r\n", url)
-	
+
 	br := bufio.NewReader(c)
 	status, err := br.ReadString('\n')
 	if err != nil {
 		return -1, false, err
 	}
-	
+
 	var codeOut int = -1
 	if strings.HasPrefix(status, "RTSP/1.0 ") {
 		parts := strings.Split(status, " ")
@@ -100,7 +106,7 @@ func ProbeRTSPDescribe(ctx context.Context, host string, port int, path string) 
 			codeOut = util.Atoi(parts[1])
 		}
 	}
-	
+
 	// Read headers
 	var contentType string
 	var contentLength int = -1
@@ -118,24 +124,21 @@ func ProbeRTSPDescribe(ctx context.Context, host string, port int, path string) 
 			contentLength = util.Atoi(strings.TrimSpace(line[15:]))
 		}
 	}
-	
+
 	// Read partial body to validate SDP
 	var body []byte
 	if contentLength > 0 {
 		body = make([]byte, min(contentLength, 2048))
-		_, err = io.ReadFull(br, body)
+		_, _ = io.ReadFull(br, body)
 	} else {
 		// Read what we can get in reasonable time
 		body, _ = io.ReadAll(io.LimitReader(br, 2048))
 	}
-	
+
 	// Validate SDP content
 	bodyStr := string(body)
 	headerSdp := strings.Contains(strings.ToLower(contentType), "application/sdp") || strings.Contains(contentType, "/sdp")
 	looksSdp := strings.Contains(bodyStr, "v=0") && strings.Contains(bodyStr, "m=video")
-	
+
 	return codeOut, (headerSdp && looksSdp), nil
 }
-
-
-

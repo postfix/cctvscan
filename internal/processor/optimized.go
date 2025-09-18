@@ -29,7 +29,10 @@ type HostResult struct {
 	BrandNote   string
 	CVEs        []string
 	Credentials string
-	Error       error
+	// Enhanced detection results
+	CameraDetection probe.CameraDetectionResult
+	StreamResults   []streams.StreamResult
+	Error           error
 }
 
 // OptimizedProcessor handles concurrent processing of multiple hosts
@@ -120,7 +123,36 @@ func (p *OptimizedProcessor) processHost(ctx context.Context, host string, ports
 		}
 	}
 
-	// MJPEG stream processing
+	// Enhanced camera detection
+	if len(result.Ports) > 0 {
+		if p.debug {
+			log.Printf("DEBUG: Running enhanced camera detection on %s with ports %v", host, result.Ports)
+		}
+		cameraDetections := probe.DetectCamera(ctx, host, result.Ports)
+		if len(cameraDetections) > 0 {
+			// Use the first detection result (most relevant)
+			result.CameraDetection = cameraDetections[0]
+			if p.debug {
+				log.Printf("DEBUG: Camera detection result: %+v", result.CameraDetection)
+			}
+		} else if p.debug {
+			log.Printf("DEBUG: No camera detections found for %s", host)
+		}
+	}
+
+	// Comprehensive stream detection
+	if len(result.Ports) > 0 {
+		outputDir := p.outputDir + "/streams"
+		if p.debug {
+			log.Printf("DEBUG: Running comprehensive stream detection on %s with ports %v", host, result.Ports)
+		}
+		result.StreamResults = streams.DetectStreams(ctx, host, result.Ports, outputDir)
+		if p.debug {
+			log.Printf("DEBUG: Found %d streams for %s", len(result.StreamResults), host)
+		}
+	}
+
+	// MJPEG stream processing (legacy)
 	if len(result.HTTPPorts) > 0 {
 		go func() {
 			outputDir := p.outputDir + "/snapshots"
@@ -183,7 +215,35 @@ func (p *OptimizedProcessor) PrintResults(results []HostResult) {
 			fmt.Println("✗ No default credentials found")
 		}
 
-		// MJPEG streams
+		// Enhanced camera detection
+		if result.CameraDetection.IsCamera {
+			fmt.Printf("🎥 Camera Detected: %s\n", result.CameraDetection.Brand)
+			if result.CameraDetection.Model != "" {
+				fmt.Printf("   Model: %s\n", result.CameraDetection.Model)
+			}
+			if result.CameraDetection.ServerHeader != "" {
+				fmt.Printf("   Server: %s\n", result.CameraDetection.ServerHeader)
+			}
+			if len(result.CameraDetection.Indicators) > 0 {
+				fmt.Printf("   Indicators: %v\n", result.CameraDetection.Indicators)
+			}
+			if result.CameraDetection.AuthRequired {
+				fmt.Printf("   Auth Required: %s\n", result.CameraDetection.AuthType)
+			}
+			if len(result.CameraDetection.Endpoints) > 0 {
+				fmt.Printf("   Endpoints: %v\n", result.CameraDetection.Endpoints)
+			}
+		}
+
+		// Stream detection results
+		if len(result.StreamResults) > 0 {
+			fmt.Printf("📺 Streams Found (%d):\n", len(result.StreamResults))
+			for _, stream := range result.StreamResults {
+				fmt.Printf("   %s: %s (%s)\n", stream.Type, stream.URL, stream.ContentType)
+			}
+		}
+
+		// MJPEG streams (legacy)
 		if len(result.HTTPPorts) > 0 {
 			fmt.Println("Checking for MJPEG streams...")
 		}

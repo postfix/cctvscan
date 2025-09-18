@@ -252,6 +252,11 @@ func GetCCTVPorts() string {
 	return probe.CameraPortsString()
 }
 
+// GetComprehensiveCCTVPorts returns the comprehensive CCTV camera ports (1000+) for masscan
+func GetComprehensiveCCTVPorts() string {
+	return probe.ComprehensiveCameraPortsString()
+}
+
 // ValidateMasscanInstallation checks if masscan is installed and accessible
 func ValidateMasscanInstallation() error {
 	cmd := exec.Command("masscan", "--version")
